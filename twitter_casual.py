@@ -14,7 +14,7 @@ app = FastAPI()
 myProcessId = 0
 NUM_PROCESSES = 3
 
-# Relógio Vetorial: [0, 0, 0]
+# Relógio Vetorial
 vector_clock = [0] * NUM_PROCESSES 
 
 posts = {}
