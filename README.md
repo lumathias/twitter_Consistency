@@ -1,6 +1,8 @@
-# Twitter: Consistência Eventual vs. Causal
+# Consistência de Dados em Sistemas Distribuídos
 
-*Autor(a):** Luisa M. G. Mathias
+## Twitter com Consistência Eventual e Causal
+
+**Autor(a):** Luisa M. G. Mathias
 
 **Disciplina:** Sistemas Distribuídos (DCA3704)
 
@@ -8,119 +10,121 @@
 
 **Instituição:** Universidade Federal do Rio Grande do Norte (UFRN)
 
+-----
 
-Este projeto implementa uma simulação simplificada de uma rede social distribuída (estilo Twitter) para demonstrar na prática a diferença entre **Consistência Eventual** e **Consistência Causal** em sistemas distribuídos.
+O sistema consiste em uma simulação de uma rede social (Twitter) implementada em **Python** utilizando **FastAPI**. O projeto demonstra na prática a diferença entre dois modelos de consistência de dados ao lidar com latência de rede e entrega de mensagens fora de ordem.
 
-O projeto consiste em três réplicas (processos) que se comunicam via HTTP.
 
-## Estrutura do Projeto
+## Algoritmos Implementados
 
-  * `twitter_eventual.py`: Implementação usando Relógios Lógicos simples (Lamport). Permite que respostas ("replies") sejam exibidas antes do post original (inconsistência temporária).
-  * `twitter_causal.py`: Implementação usando Relógios Vetoriais (Vector Clocks) e Buffer de Espera. Garante que uma resposta só seja entregue após a visualização do post original.
+1.  **Consistência Eventual:**
 
-## Pré-requisitos
+      * Utiliza *Relógios Lógicos Simples (Lamport)* para ordenação básica.
+      * As mensagens são entregues assim que chegam ao nó.
+      * **Comportamento:** Permite a exibição de "Replies Órfãs" (respostas que chegam antes da postagem original). A convergência ocorre eventualmente quando todas as mensagens chegam.
 
-O projeto foi desenvolvido em **Python 3**. As seguintes bibliotecas são necessárias:
+2.  **Consistência Causal:**
+
+      * Utiliza *Relógios Vetoriais (Vector Clocks)* para rastrear dependências causais.
+      * Implementa um *Buffer de Mensagens* para reter eventos que chegaram fora de ordem.
+      * **Comportamento:** Garante que uma resposta só seja visível após a chegada do post original, respeitando a relação de causa e efeito.
+
+-----
+
+## Como Executar (Google Cloud Shell)
+
+### 1. Preparar o Ambiente
+
+Abra o terminal do Cloud Shell e instale as dependências necessárias:
 
 ```bash
 pip install fastapi uvicorn requests
 ```
 
-## Como Rodar (Passo a Passo)
+### 2. Estratégia de Terminais
 
-Para executar o sistema, você precisará de **4 terminais** abertos simultaneamente (3 para os servidores e 1 para enviar comandos).
+Para simular o sistema distribuído, você precisará de **4 abas de terminal** abertas simultaneamente:
 
-### Cenário 1: Testando a Consistência Eventual
+  * **Terminais 1, 2 e 3:** Rodarão as instâncias (nós) do servidor.
+  * **Terminal 4:** Será usado como cliente para enviar comandos `curl`.
 
-Neste cenário, vamos demonstrar uma **anomalia**: uma resposta aparecendo antes da pergunta.
+### 3. Iniciar os Servidores
 
-1.  **Inicie os Servidores:**
-    Abra 3 terminais e rode um comando em cada um:
+Escolha qual versão deseja rodar (Eventual ou Causal) e execute os comandos abaixo, um em cada terminal correspondente:
 
-      * Terminal 1: `python twitter_eventual.py 0`
-      * Terminal 2: `python twitter_eventual.py 1`
-      * Terminal 3: `python twitter_eventual.py 2`
+| Terminal | Comando (Versão Eventual) | Comando (Versão Causal) | Porta |
+| :--- | :--- | :--- | :--- |
+| **Aba 1** | `python twitter_eventual.py 0` | `python twitter_causal.py 0` | 8080 |
+| **Aba 2** | `python twitter_eventual.py 1` | `python twitter_causal.py 1` | 8081 |
+| **Aba 3** | `python twitter_eventual.py 2` | `python twitter_causal.py 2` | 8082 |
 
-2.  **Execute o Teste (Terminal 4):**
-    No quarto terminal (livre), execute os comandos abaixo na ordem.
-
-      * **Passo A: Postar no Nó 0 (Lento)**
-        *O Nó 0 tem um delay simulado de 2 segundos para propagar a mensagem.*
-
-        ```bash
-        curl -X POST "http://localhost:8080/post" \
-        -H "Content-Type: application/json" \
-        -d '{"processId": 0, "evtId": "evt_1", "author": "Alice", "text": "Ola Mundo", "timestamp": null}'
-        ```
-
-      * **Passo B: Responder diretamente no Nó 2 (Rápido)**
-        *Enviamos a resposta ao Nó 2 antes que a mensagem de Alice chegue lá.*
-
-        ```bash
-        curl -X POST "http://localhost:8082/post" \
-        -H "Content-Type: application/json" \
-        -d '{"processId": 2, "evtId": "reply_1", "parentEvtId": "evt_1", "author": "Bob", "text": "Oi Alice!", "timestamp": null}'
-        ```
-
-3.  **Verifique o Resultado (Terminal 3):**
-    No terminal do Processo 2, você verá:
-
-    > `[ÓRFÃ] (Parent: evt_1) -> Bob: Oi Alice!`
-
-    Isso comprova a consistência eventual: a mensagem chegou, foi aceita, mas violou a ordem causal.
+> **Nota:** Para trocar de versão, pare os processos atuais com `Ctrl+C` antes de iniciar os novos.
 
 -----
 
-### Cenário 2: Testando a Consistência Causal
+## Roteiro de Testes (Demonstração)
 
-Neste cenário, o sistema deve **impedir** a visualização da resposta até que a pergunta chegue.
+Utilize a **Aba 4** para enviar as requisições. O cenário simula um atraso no **Nó 0**, fazendo com que uma resposta enviada diretamente ao **Nó 2** chegue antes do post original.
 
-1.  **Reinicie os Servidores:**
+### Cenário 1: Testando Consistência Eventual
 
-      * Vá nos Terminais 1, 2 e 3.
-      * Pressione `Ctrl+C` para parar a versão eventual.
-      * Inicie a versão causal:
-          * Terminal 1: `python twitter_causal.py 0`
-          * Terminal 2: `python twitter_causal.py 1`
-          * Terminal 3: `python twitter_causal.py 2`
+Certifique-se de que está rodando `twitter_eventual.py`.
 
-2.  **Execute o Teste (Terminal 4):**
-    Note que o payload agora envia uma lista vazia `[]` no timestamp para inicialização vetorial.
+1.  **Postar no Nó 0 (Lento):**
 
-      * **Passo A: Postar no Nó 0 (Lento)**
+    ```bash
+    curl -X POST "http://localhost:8080/post" -H "Content-Type: application/json" -d '{"processId": 0, "evtId": "p1", "author": "Alice", "text": "Post Original", "timestamp": null}'
+    ```
 
-        ```bash
-        curl -X POST "http://localhost:8080/post" \
-        -H "Content-Type: application/json" \
-        -d '{"processId": 0, "evtId": "causal_msg", "author": "Alice", "text": "Post Causal", "timestamp": []}'
-        ```
+2.  **Responder Imediatamente no Nó 2:**
 
-      * **Passo B: Responder diretamente no Nó 2**
+    ```bash
+    curl -X POST "http://localhost:8082/post" -H "Content-Type: application/json" -d '{"processId": 2, "evtId": "r1", "parentEvtId": "p1", "author": "Bob", "text": "Resposta Rapida", "timestamp": null}'
+    ```
 
-        ```bash
-        curl -X POST "http://localhost:8082/post" \
-        -H "Content-Type: application/json" \
-        -d '{"processId": 2, "evtId": "causal_reply", "parentEvtId": "causal_msg", "author": "Bob", "text": "Resposta Causal", "timestamp": []}'
-        ```
+**Verificação (Olhe o Terminal do Nó 2):**
 
-3.  **Verifique o Resultado (Terminal 3):**
-    No terminal do Processo 2, observe o comportamento:
+  * O sistema exibirá imediatamente: `[ÓRFÃ] (Parent: p1) -> Bob: Resposta Rapida`.
+  * Isso prova que a consistência foi quebrada momentaneamente (efeito antes da causa).
 
-    1.  Assim que você envia o **Passo B**, ele exibe:
-        > `BUFFERIZADO: causal_reply (Aguardando dependências...)`
-    2.  O feed **não** mostra a resposta de Bob.
-    3.  Após alguns segundos (quando a mensagem de Alice chega), ele exibe:
-        > `ENTREGUE: causal_msg`
-        > `ENTREGUE: causal_reply` (Desenfileirado automaticamente)
+### Cenário 2: Testando Consistência Causal
 
-    Isso comprova a consistência causal: a ordem lógica foi respeitada.
+Pare os processos anteriores e inicie `twitter_causal.py`.
 
-##  Configuração de Portas
+1.  **Postar no Nó 0 (Lento):**
 
-O sistema utiliza as seguintes portas padrão:
+    ```bash
+    curl -X POST "http://localhost:8080/post" -H "Content-Type: application/json" -d '{"processId": 0, "evtId": "pc1", "author": "Alice", "text": "Post Causal", "timestamp": []}'
+    ```
 
-  * Processo 0: `8080`
-  * Processo 1: `8081`
-  * Processo 2: `8082`
+2.  **Responder Imediatamente no Nó 2:**
 
-Certifique-se de que estas portas estejam livres no seu ambiente.
+    ```bash
+    curl -X POST "http://localhost:8082/post" -H "Content-Type: application/json" -d '{"processId": 2, "evtId": "rc1", "parentEvtId": "pc1", "author": "Bob", "text": "Resposta Causal", "timestamp": []}'
+    ```
+
+**Verificação (Olhe o Terminal do Nó 2):**
+
+  * O sistema exibirá: `BUFFERIZADO: rc1`. A mensagem de Bob **não** aparece no feed.
+  * Após alguns segundos, quando a mensagem de Alice chega, ambas aparecem na ordem correta:
+    1.  `POST Alice: Post Causal`
+    2.  `-> REPLY Bob: Resposta Causal`
+
+-----
+
+## Tecnologias
+
+  * **Python 3**
+  * **FastAPI:** Framework Web Assíncrono
+  * **Uvicorn:** Servidor ASGI
+  * **Requests:** Cliente HTTP
+  * **Threading:** Concorrência para envio de mensagens
+-----
+
+## Referências
+
+  * Arquivo de especificação do projeto: `consistência.pdf`.
+  * Tanenbaum, A. S., & Van Steen, M. (2017). *Distributed Systems* (3ª Ed.).
+  * Lamport, L. (1978). "Time, Clocks, and the Ordering of Events in a Distributed System".
+
+-----
